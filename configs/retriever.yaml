@@ -1,0 +1,26 @@
+schema: msi.retriever
+run_id: retriever
+model:
+  name: bge-m3
+  path: models/bge-m3
+paths:
+  corpus: data/protocol/skills.json
+  task_pool: data/anchor_tasks/paper-260/task-pool.json
+  anchor_retrieval: data/anchor_retrieval/paper-260/bge_base_rerank.json
+  instances_dir: SR-Agents/data/bench/instances
+  work_dir: work
+  cache_dir: work/{run_id}/cache
+  prepared_data: data/retriever/data.json
+defaults:
+  seed: 42
+  dev_ratio: 0.1
+  near_threshold: 0.92
+  epochs: 3
+  batch_size: 16
+  learning_rate: 2.0e-05
+  warmup_ratio: 0.1
+  temperature: 0.05
+  max_length: 8192
+  eval_batch_size: 16
+  smoke_steps: 0
+  dev_limit: 0

@@ -1,0 +1,31 @@
+# Conda environment for the tested reference runtime.
+# The reference machine used torch 2.11.0+cu128 and vllm 0.20.2+cu129 CUDA
+# builds; PyPI wheels carry their own CUDA runtime, so install the build
+# matching your driver if the defaults do not work. Python 3.10-3.12 is
+# supported; the reference runtime is Python 3.12.13.
+name: msi
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12.13
+  - pip
+  - pip:
+      - accelerate==1.12.0
+      - datasets==4.5.0
+      - latex2sympy2==1.9.1
+      - networkx==3.6.1
+      - numpy==2.2.6
+      - openai==2.20.0
+      - pandas==3.0.0
+      - peft==0.19.1
+      - pyyaml==6.0.3
+      - rank-bm25==0.2.2
+      - requests==2.32.5
+      - scipy==1.17.0
+      - sentence-transformers==5.2.2
+      - sympy==1.14.0
+      - tensorboard==2.21.0
+      - torch==2.11.0
+      - tqdm==4.67.3
+      - transformers==5.9.0
+      - vllm==0.20.2

@@ -1,0 +1,1 @@
+"""MSI synthetic-data generation."""

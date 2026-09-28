@@ -1,0 +1,59 @@
+# Reference hardware: NVIDIA A800-SXM4-80GB.
+# Source questions come from the training split, excluding validation.
+schema: msi.anchors
+run_id: paper
+paths:
+  corpus: data/protocol/skills.json
+  synthetic_dir: data/synthetic
+  source_file: null
+  anchor_task_pool: data/anchor_tasks/{run_id}/task-pool.json
+  anchor_assignment_dir: data/anchor_tasks/{run_id}/assignments
+  anchor_retrieval_dir: data/anchor_retrieval/{run_id}
+  anchor_dir: data/anchors/{run_id}
+  test_instances:
+    theoremqa: SR-Agents/data/bench/instances/theoremqa.json
+    medcalcbench: SR-Agents/data/bench/instances/medcalcbench.json
+    logicbench: SR-Agents/data/bench/instances/logicbench.json
+    toolqa: SR-Agents/data/bench/instances/toolqa.json
+  work_dir: work
+  cache_dir: work/{run_id}/cache
+retrieval:
+  name: bge_base_rerank
+  first_stage: bge_base
+  model: models/bge-base-en-v1.5
+  reranker_model: models/bge-reranker-v2-m3
+  first_stage_top_k: 10
+  top_k: 10
+  batch_size: 256
+  query_chunk_size: 4096
+  dtype: bfloat16
+  reranker_batch_size: 32
+  reranker_max_length: 512
+runtime:
+  api_base: null
+  port: 8000
+  gpu_memory_utilization: 0.92
+  max_model_len: 32768
+models:
+  Qwen3.5-2B:
+    path: models/Qwen3.5-2B
+  Phi-3.5-mini-instruct:
+    path: models/Phi-3.5-mini-instruct
+  Llama-3.2-3B-Instruct:
+    path: models/Llama-3.2-3B-Instruct
+  Apertus-8B-Instruct-2509:
+    path: models/Apertus-8B-Instruct-2509
+defaults:
+  near_count: 30
+  random_count: 30
+  oversample: 1.6
+  base_answer_max_tokens: 16384
+  workers: 128
+  num_train: 200
+  num_val: 80
+  split_seed: 42
+  fixed_val_offset: 400
+overrides:
+  datasets: {}
+  models: {}
+  skills: {}

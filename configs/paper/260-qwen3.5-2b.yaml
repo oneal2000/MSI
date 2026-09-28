@@ -1,0 +1,54 @@
+# Reference hardware: NVIDIA A800-SXM4-80GB.
+# Shared synthetic pool; anchors are regenerated for this run.
+schema: msi.train
+run_id: paper-260
+model:
+  name: Qwen3.5-2B
+  path: models/Qwen3.5-2B
+regimes:
+- notext
+- withtext
+paths:
+  corpus: data/protocol/skills.json
+  synthetic_dir: data/synthetic
+  anchor_dir: data/anchors/{run_id}
+  test_instances:
+    theoremqa: SR-Agents/data/bench/instances/theoremqa.json
+    medcalcbench: SR-Agents/data/bench/instances/medcalcbench.json
+    logicbench: SR-Agents/data/bench/instances/logicbench.json
+    toolqa: SR-Agents/data/bench/instances/toolqa.json
+  adapter_dir: work/{run_id}/adapters
+  work_dir: work
+  cache_dir: work/{run_id}/cache
+  external_dir: data/external
+runtime:
+  api_base: null
+  port: 8003
+  gpu_memory_utilization: 0.92
+  max_model_len: 65536
+defaults:
+  use_anchors: true
+  rank: 8
+  epochs: 8
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 0.0001
+  max_length: 20480
+  num_train: 200
+  num_val: 80
+  split_seed: 42
+  val_backend: vllm
+  val_async: true
+  val_concurrency: 4
+  val_freq: 2
+  val_workers: 512
+  compute_val_loss: false
+  skip_base_baseline: true
+  val_fix_val: true
+  fixed_val_offset: 400
+  anchor_near_count: 30
+  anchor_random_count: 30
+overrides:
+  datasets: {}
+  models: {}
+  skills: {}

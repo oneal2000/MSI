@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""Zero-install launcher for the MSI paper release checkout."""
+
+from pathlib import Path
+import sys
+
+
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "SR-Agents/src"))
+
+from msi.cli import main  # noqa: E402
+
+
+if __name__ == "__main__":
+    main()
