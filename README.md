@@ -294,13 +294,13 @@ four support three independent workers and one validator.
 | `--rank`, `--learning-rate`, `--epochs` | 8, `1e-4`, 8 | LoRA rank and optimization |
 | `--batch-size`, `--gradient-accumulation-steps` | 1 × 8 for Qwen 260 | Effective batch; other model/skill layouts are in YAML |
 | `--max-length` | 20,480 | Maximum training sample length |
-| `--val-backend` | `vllm` | `vllm`, `inprocess`, or `none` |
+| `--val-backend` | `vllm` | `vllm` uses a separate validation GPU; `inprocess` validates synchronously on the training GPU. Both use 1-SE epoch selection. `none` disables validation. |
 | `--val-freq`, `--val-max-tokens` | 2, per-domain table | Validation epochs and generation budget |
 | `--val-workers`, `--val-concurrency` | 512, 4 | Validation requests and concurrent validation jobs |
 | `--val-async` / `--no-val-async` | Async | Validation scheduling |
 | `--compute-val-loss` / `--no-compute-val-loss` | Disabled | Additional validation-loss computation |
 | `--base-baseline` / `--no-base-baseline` | Disabled | Base-model synthetic-validation diagnostic |
-| `--no-validation` | Not set | Exploratory training without generation validation/1-SE selection |
+| `--no-validation` | Not set | Exploratory training without generation validation/1-SE selection; still uses `--num-train` positives |
 | `--gpu`, `--val-gpu` | Four selected devices; last used for validation | Training devices and an optional explicit validation GPU |
 | `--api-base`, `--val-port` | Managed validator, 8003 | Existing validation endpoint or managed-server port |
 | `--gpu-memory-utilization`, `--server-max-model-len` | 0.92, 65,536 | Validation serving limits |

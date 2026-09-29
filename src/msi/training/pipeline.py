@@ -204,13 +204,13 @@ def run(config: dict, *, dry_run: bool = False) -> int:
                 "job_id": job_id,
             })
 
-    pending_validation = any(
-        spec["values"].get("val_backend", "vllm") != "none"
+    pending_server_validation = any(
+        spec["values"].get("val_backend", "vllm") == "vllm"
         for spec in job_specs
     )
-    train_gpus, val_gpu = _gpu_roles(config, pending_validation)
+    train_gpus, val_gpu = _gpu_roles(config, pending_server_validation)
 
-    if pending_validation and not external_api_base:
+    if pending_server_validation and not external_api_base:
         server = managed_validation_server(
             python=config.get("_python") or runner.python,
             model_path=model["path"], served_name=model["name"], gpu=str(val_gpu),

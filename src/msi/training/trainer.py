@@ -207,11 +207,7 @@ class ValidationCallback(TrainerCallback):
                     best_dir = self.output_path / "best"
                     if best_dir.exists():
                         shutil.rmtree(best_dir)
-                    if self.val_backend == "inprocess":
-                        # the live model IS the epoch-ep adapter we just scored
-                        self.model.save_pretrained(str(best_dir))
-                    else:
-                        shutil.copytree(self._staging_dir(ep), best_dir)
+                    shutil.copytree(self._staging_dir(ep), best_dir)
                     json.dump({"best_epoch": ep, "best_acc": acc},
                               open(self.output_path / "best_epoch.json", "w"),
                               indent=2)
@@ -246,16 +242,13 @@ class ValidationCallback(TrainerCallback):
                 self.tb.add_scalar("val/loss", val_loss, ep)
             print(f"[epoch {ep}] val_loss={val_loss:.4f}", flush=True)
 
-        # vLLM path needs a saved per-epoch adapter snapshot to register;
-        # inprocess generates on the live model (no snapshot, no register).
-        # Apply the configured generation-validation cadence; validation loss
-        # above is still logged every epoch.
-        if self.val_backend == "vllm":
-            if self.val_freq > 1 and ep % self.val_freq != 0:
-                self.epoch_loss_buf = []
-                return control
-            self.model.save_pretrained(str(self._staging_dir(ep)))
-            self._scheduled_epochs.append(ep)
+        # Both backends need exact epoch weights for 1-SE deployment;
+        # only vLLM also registers these snapshots with a separate server.
+        if self.val_freq > 1 and ep % self.val_freq != 0:
+            self.epoch_loss_buf = []
+            return control
+        self.model.save_pretrained(str(self._staging_dir(ep)))
+        self._scheduled_epochs.append(ep)
 
         if self.val_backend == "vllm" and self.val_async:
             fut = self._pool.submit(
@@ -365,9 +358,6 @@ class ValidationCallback(TrainerCallback):
                     "one or more required async validations failed: "
                     + "; ".join(validation_errors)
                 )
-        if self.val_backend == "vllm" and self.val_instances:
+        if self.val_instances:
             self.validated_epochs()
-        # 1-SE epoch selection (production deploy) — overrides argmax best/.
-        # Survey runs ignore deploy; conclusions apply 1-SE post-hoc instead.
-        if self.val_backend == "vllm":
             self._apply_one_se_rule()

@@ -110,6 +110,11 @@ def train_lora(
     """Train skill-specific LoRA adapter with vLLM-compatible output."""
     if not training_job_id:
         raise SystemExit("--training-job-id is mandatory")
+    # Live-model validation must finish before the next optimizer update.
+    val_async = val_async and val_backend == "vllm"
+    if val_backend == "none":
+        num_val = 0
+        val_fix_val = False
     anchor_sha256 = file_sha256(anchor_file) if anchor_file else None
     n_anchor_samples = 0
     n_near_anchor_samples = 0
@@ -162,14 +167,15 @@ def train_lora(
     # a disjoint ~num_val set every epoch.
     val_instances: list[dict] = []
     tools: list[dict] = []
-    if val_backend != "none":
+    if num_train is not None or val_backend != "none":
         val_instances = split_train_val(
             data, n_train=num_train or 0, n_val=num_val or 0, seed=split_seed,
             fix_val=val_fix_val, fixed_val_offset=fixed_val_offset,
         )
+    if val_backend != "none":
         tools = load_skill_tools(skill_id)
     n_instances = len(data.get("instances", []))
-    if val_backend != "none":
+    if num_train is not None or val_backend != "none":
         expected_train = int(num_train or 0)
         expected_val = int(num_val or 0)
         if n_instances != expected_train or len(val_instances) != expected_val:
