@@ -40,6 +40,11 @@ paths:
       logicbench: data/routing/logicbench.json
       toolqa: data/routing/toolqa.json
       medcalcbench: data/routing/medcalcbench.json
+    random_same_domain:
+      theoremqa: data/routing/random/theoremqa_s101.json
+      logicbench: data/routing/random/logicbench_s101.json
+      toolqa: data/routing/random/toolqa_s101.json
+      medcalcbench: data/routing/random/medcalcbench_s101.json
   output_dir: results/inference/{run_id}
   eval_dir: results/eval/{run_id}
   work_dir: work
@@ -80,6 +85,9 @@ retrieval_profiles:
   paper_ft:
     frozen: true
     required_profile: bge_m3_ft_synthetic
+  random_same_domain:
+    frozen: true
+    required_profile: random_same_domain
 methods:
 - naive
 - golden_skill
@@ -90,6 +98,7 @@ methods:
 - retrieved_lora
 - retrieved_lora_text
 method_retrieval:
+  mismatched_lora: random_same_domain
   bge_base_top1: bge_base
   bge_base_rerank_top1: bge_base_rerank
   bge_m3_top1: paper_ft

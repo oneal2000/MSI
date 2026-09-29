@@ -1,13 +1,14 @@
 # Modular Skill Internalization (MSI)
 
-MSI transfers the capabilities described by a skill into a separate LoRA adapter.
-This repository contains the implementation, experiment configurations and data
-for 408 skills across TheoremQA, LogicBench, ToolQA and MedCalc-Bench.
+Code, configurations and synthetic training data for **Modular Skill Internalization
+for Agentic Foundation Models**, covering 408 skills across TheoremQA, LogicBench,
+ToolQA and MedCalc-Bench. Trained adapters and router weights are not included;
+the commands below produce them. The released common data split supports
+retraining, but differs from the inputs used for the paper tables.
 
-The workflow is **synthetic tasks → trajectories → anchors → adapter training →
-retrieval → inference and scoring**. Each section below gives the command,
-configuration and output for one stage. We also provide our generated tasks and
-trajectories so you can load them directly and continue from anchor construction.
+Start with the supplied data, build anchors, train adapters, then evaluate.
+Task/trajectory generation and router retraining are optional. Each stage below
+lists its commands, configuration and outputs.
 
 All examples use the existing YAML defaults. Tables list command-specific options;
 [common options](#8-changing-configurations) apply across stages. A YAML key in a
@@ -24,21 +25,24 @@ table can be set in the file or passed as `--set KEY=VALUE`.
 
 ## 1. Installation and models
 
-Download and extract the code from the
-[anonymous project page](https://anonymous.4open.science/r/MSI). Run all commands
-from the extracted repository root. SR-Agents is bundled; no separate clone or
+Open the [anonymous project page](https://anonymous.4open.science/r/MSI), download
+the repository archive, and extract it. Run the Bash examples below from the
+extracted directory containing `msi`, `configs/`, `SR-Agents/` and `data/packages/`. SR-Agents is bundled; no separate clone or
 submodule update is needed. Python 3.10–3.12 is supported; `environment.yaml`
-records the tested reference environment:
+uses the pinned dependencies in `requirements.txt`. Use Linux, Conda and an NVIDIA driver
+compatible with the installed PyTorch/vLLM CUDA builds:
 
 ```bash
-conda env create -f environment.yaml && conda activate msi
-python -m pip install -e ./SR-Agents -e .
+conda env create -f environment.yaml
+conda activate msi
+python -m pip install -r requirements.txt -e ./SR-Agents -e .
 cp configs/cluster.example.yaml configs/cluster.local.yaml
 ./msi --help
 ```
 
 The supplied configurations retain the current defaults for
-**NVIDIA A800-SXM4-80GB** GPUs. Edit `configs/cluster.local.yaml` for local paths:
+**NVIDIA A800-SXM4-80GB** GPUs. Full examples select four 80-GB GPUs;
+adapter training also supports one training GPU plus one validation GPU. Edit `configs/cluster.local.yaml` for local paths:
 `models` selects student/teacher checkpoints, `retrievers` selects embedding and
 reranking models, and `paths` locates external tool resources. Relative paths are
 resolved from the repository root.
@@ -57,7 +61,7 @@ hf download Qwen/Qwen3.5-2B --local-dir models/Qwen3.5-2B
 | `meta-llama/Llama-3.2-3B-Instruct` | `models/Llama-3.2-3B-Instruct` | `llama3.2-3b` / `Llama-3.2-3B-Instruct` | Student (gated) |
 | `microsoft/Phi-3.5-mini-instruct` | `models/Phi-3.5-mini-instruct` | `phi3.5-mini` / `Phi-3.5-mini-instruct` | Student |
 | `swiss-ai/Apertus-8B-Instruct-2509` | `models/Apertus-8B-Instruct-2509` | `apertus-8b` / `Apertus-8B-Instruct-2509` | Student |
-| `Qwen/Qwen3.5-122B-A10B` | `models/Qwen3.5-122B-A10B` | — | Teacher; unnecessary when reusing supplied synthetic data |
+| `Qwen/Qwen3.5-122B-A10B` | `models/Qwen3.5-122B-A10B` | — | Teacher; only for generating new data |
 | `BAAI/bge-base-en-v1.5` | `models/bge-base-en-v1.5` | — | Anchor retrieval |
 | `BAAI/bge-reranker-v2-m3` | `models/bge-reranker-v2-m3` | — | Anchor reranking |
 | `BAAI/bge-m3` | `models/bge-m3` | — | Router and retrieval baseline; unnecessary with frozen routes |
@@ -111,15 +115,31 @@ training validation and inference need these resources even with supplied trajec
 
 ## 3. Synthetic data
 
-### Generate tasks and trajectories
+### Use our generated data
 
-The teacher first generates questions conditioned on each skill, with within-skill
-exact/near deduplication. It then solves those tasks to produce trajectories;
-ToolQA trajectories include tool execution. The evaluator checks the generated
-solutions. An accepted record must have a non-empty extracted answer and training
-samples, pass the evaluator, and contain no truncated trajectory. A separate
-post-generation process removes exact/near benchmark-question overlaps; benchmark
-questions are not passed to the generator.
+The 25 archives contain **208,627 tasks and 198,717 accepted trajectories**,
+covering all 408 skills with at least 480 trajectories per skill. Extract them
+from the repository root to populate `data/synthetic/`:
+
+```bash
+for archive in data/packages/synthetic-*.tar.gz; do
+  tar -xzf "$archive"
+done
+```
+
+Set the variables used by the remaining stages; `run_id` names the output run:
+
+```bash
+run_id=paper-260
+synthetic_dir=data/synthetic
+demos_file=data/demos/two_shot.json
+```
+
+Continue with Section 4 using these variables in the same shell. Generating
+new data is optional; expand the recipe below if needed.
+
+<details>
+<summary>Optional: generate new tasks, trajectories and demonstrations</summary>
 
 Configure the teacher in `configs/generate.yaml` and its local path in the cluster
 file. The default teacher is `Qwen/Qwen3.5-122B-A10B` (downloaded in Section 1).
@@ -186,36 +206,12 @@ python -m msi.evaluation.demos --pool "$synthetic_dir" \
 This selects two median-length training positives per skill, each at most 4,096
 tokens. It refuses to replace existing output; skip it when already complete.
 
-### Use our generated data
-
-We also include **208,627 tasks and 198,717 accepted trajectories for all 408
-skills**, with at least 480 trajectories per skill. The archives store
-checkout-relative paths, so unpacking from the repository root lands the pool
-directly at `data/synthetic/` — nothing is extracted into `data/packages/` and
-no move step is needed:
-
-```bash
-for archive in data/packages/synthetic-*.tar.gz; do
-  tar -xzf "$archive"
-done
-```
-
-Then set the variables consumed by the later stages. Unpacking itself does not
-involve `run_id`; it only names this reproduction's anchor and training outputs:
-
-```bash
-synthetic_dir=data/synthetic
-demos_file=data/demos/two_shot.json
-```
-
-Both choices feed the same anchor and training commands below. Keep the selected
-`synthetic_dir` and `demos_file` together throughout the remaining stages.
+</details>
 
 ## 4. Anchors
 
-Anchor preparation retrieves non-matching training questions with BGE-base plus
-reranking, then assigns near-miss and random questions to each target skill.
-Answer generation uses the chosen student without external tool execution.
+Run both stages for the selected training split. Preparation uses BGE-base and
+the reranker; answering uses the selected student and does not execute tools.
 
 ### `anchors prepare`: retrieve and assign questions
 
@@ -311,7 +307,7 @@ four support three independent workers and one validator.
 | `paths.adapter_dir` / `--output-dir` | `work/<run-id>/adapters` | Adapter output root |
 
 `configs/paper/260-<model>.yaml` provides one training configuration per model —
-the paper's 260-positive setting, with both text regimes selectable through
+the paper's nominal 260-record budget (200 positives + 60 anchors), with both text regimes selectable through
 `--regime`. Other data budgets repeat the same commands with the quota table
 below and a distinct run ID; anchors must be prepared with the same counts
 (Section 4). `configs/train/<model>.yaml` exposes the same interface with
@@ -333,6 +329,9 @@ For example, the 512 budget for Qwen:
   --cluster configs/cluster.local.yaml --run-id paper-512 --gpu 0,1 \
   --set paths.synthetic_dir=data/synthetic \
   --set defaults.num_train=400 --near-count 64 --random-count 48
+./msi anchors answer -c configs/anchors.yaml \
+  --cluster configs/cluster.local.yaml --run-id paper-512 --gpu 0 \
+  --base-model Qwen3.5-2B --set paths.synthetic_dir=data/synthetic
 ./msi train -c configs/paper/260-qwen3.5-2b.yaml \
   --cluster configs/cluster.local.yaml --run-id paper-512 --gpu 0,1,2,3 \
   --set paths.synthetic_dir=data/synthetic --regime notext \
@@ -353,9 +352,8 @@ requires the complete corresponding adapter pool, not just a single trained skil
 
 ## 6. Retriever
 
-The router is BGE-M3 fine-tuned to retrieve skills from the fixed library. Its
-training is independent of adapter training. The default eval configs can also
-use the supplied frozen routes in `data/routing/`, without retraining the router.
+Skip this section when using the supplied frozen routes in `data/routing/`.
+To train a new BGE-M3 router, run `prepare`, `train`, then `retrieve` below.
 
 ### `retriever prepare`: construct train/dev data
 
@@ -409,15 +407,14 @@ both are produced by the commands above. The paper's actual inference-time
 routing is already frozen in `data/routing/<dataset>.json` (consumed by the
 default `paper_ft` profile), so evaluation does not need router weights. We do
 include the historical router training input (187,763 train / 20,858 dev
-queries). Its archive stores checkout-relative paths like the synthetic
-archives, so unpacking from the repository root lands it directly at
-`data/retriever/data.json` — nothing is extracted into `data/packages/`:
+queries). Extract it from the repository root to create
+`data/retriever/data.json`:
 
 ```bash
 tar -xzf data/packages/retriever.tar.gz
 ```
 
-To retrain from it instead of `prepare`, choose `router_run=retriever` and set
+To use it instead of `prepare`, set `router_run=retriever` and
 `paths.prepared_data=data/retriever/data.json` in the training command above.
 
 ### `retriever retrieve`: rank benchmark skills
@@ -509,17 +506,12 @@ starts its model servers automatically.
 | `retrieved_lora` | `notext` | No skill text; retrieved adapter (`paper_ft`) |
 | `retrieved_lora_text` | `withtext` | Retrieved skill text and adapter (`paper_ft`) |
 | `retrieved_lora_notext_text` | `notext` | Retrieved adapter; skill text added at inference only |
-| `mismatched_lora` | `notext` | Non-gold adapter from a supplied route; gold tools |
+| `mismatched_lora` | `notext` | Same-domain non-gold adapter; frozen seed-101 route by default; gold tools |
 
-`methods`, `method_adapters` and `method_retrieval` in `configs/eval/<model>.yaml`
-control these choices. A `*_top1` name identifies the retrieval family; the
-profile it actually consumes is decided by `method_retrieval`. In the default
-configuration only `bge_m3_top1` is enabled among the text-retrieval methods,
-and it is mapped to `paper_ft` — the supplied frozen routes of the fine-tuned
-BGE-M3 router, the paper's main routing result — the same profile the
-retrieved-LoRA methods use. To compare unfine-tuned retrievers, either add the
-corresponding method (for example `--method bm25_top1 --method bge_base_top1`)
-or remap `method_retrieval.bge_m3_top1=bge_m3` for raw BGE-M3.
+`method_retrieval` determines the actual router: the default `bge_m3_top1` and
+retrieved-LoRA methods share frozen fine-tuned `paper_ft` routes. For other
+retrievers, select e.g. `--method bm25_top1 --method bge_base_top1`, or set
+`method_retrieval.bge_m3_top1=bge_m3` to use raw BGE-M3.
 
 <details>
 <summary>Point evaluation to your newly trained router</summary>
@@ -623,6 +615,38 @@ The teacher request budget is 32,768 tokens. Shared prompt/token rules and think
 modes are in `src/msi/protocol.py`. Validation selects checkpoints on synthetic
 positives; benchmark labels must not select epochs or routing settings.
 
+## Paper experiment recipes
+
+All rows use the installation and resource setup above. New-data runs are not
+exact reruns of historical scores; see the reproduction notes below.
+
+| Paper experiment | Configuration and command selection |
+| --- | --- |
+| Oracle comparison | Section 5, both regimes, then Section 7 with `naive`, `golden_skill`, `golden_skill_2shot`, `golden_lora`, `golden_lora_text`; repeat for each of the four model configs |
+| Retrieved comparison | Same adapters; Section 7 with `bge_m3_top1`, `retrieved_lora`, `retrieved_lora_text`; defaults share frozen `paper_ft` routes |
+| Skill specificity | `mismatched_lora`, same-domain non-gold routes at seeds 101/202/303; example below |
+| Data-budget curve | Qwen and Llama, both regimes, each budget in Section 5; prepare **and answer** matching anchors in a distinct run |
+| Retriever comparison | Section 6 retrieval profiles and Recall@K outputs; Section 7 uses the same profile for text and adapter methods when comparing downstream accuracy |
+
+For the skill-specificity comparison, reuse the trained `notext` adapter library
+and evaluate each frozen random seed separately:
+
+```bash
+for seed in 101 202 303; do
+  for dataset in theoremqa logicbench toolqa medcalcbench; do
+    ./msi evaluate -c configs/eval/qwen3.5-2b.yaml \
+      --cluster configs/cluster.local.yaml --run-id "${run_id}-mismatch-s${seed}" --gpu 0 \
+      --adapter-dir "work/$run_id/adapters" --dataset "$dataset" \
+      --method mismatched_lora \
+      --retrieval-file "data/routing/random/${dataset}_s${seed}.json"
+  done
+done
+```
+
+`mismatched_lora` defaults to seed 101 when no route file is supplied. Keep the
+gold tool condition and compare against `golden_lora`; report the three-seed
+mean and variability. Random routing seeds are not independent training seeds.
+
 ## Reproduction notes
 
 <details>
@@ -630,7 +654,9 @@ positives; benchmark labels must not select epochs or routing settings.
 
 CPU/interface checks, all 408 skills' five-budget splits, archive contents and
 command dry-runs have been checked. A fresh GPU end-to-end run, complete paper
-tables and the final anonymous download have not been validated.
+tables and the final anonymous download have not been validated. Some historical
+model revisions and external resource versions are not pinned; downloading current
+upstream weights does not establish exact checkpoint equivalence.
 
 The release keeps the complete synthetic pool, including tasks without an
 accepted trajectory and trajectories beyond the requested quota. Schema prefixes
